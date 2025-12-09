@@ -123,7 +123,7 @@ def detect_raise_hands(
                 "label":"raise_hand",
                 "prob": 1.0,
                 "type": "raise_hand",
-                "color": "#0000ff"
+                "color": "#00ff00"  # 绿色
             })
 
 

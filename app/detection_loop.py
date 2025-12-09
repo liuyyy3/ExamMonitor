@@ -31,6 +31,62 @@ _current_boxes = []  # 当前异常框（list[dict]），结构和 event 里的 
 # 保护状态的锁
 _state_lock = threading.Lock()
 
+def _iou(b1, b2):
+    x1, y1, x2, y2 = b1
+    x1b, y1b, x2b, y2b = b2
+    xx1 = max(x1, x1b)
+    yy1 = max(y1, y1b)
+    xx2 = min(x2, x2b)
+    yy2 = min(y2, y2b)
+    w = max(0, xx2 - xx1)
+    h = max(0, yy2 - yy1)
+    inter = w * h
+    area1 = max(0, x2 - x1) * max(0, y2 - y1)
+    area2 = max(0, x2b - x1b) * max(0, y2b - y1b)
+    union = area1 + area2 - inter
+    if union <= 0:
+        return 0.0
+    return inter / union
+
+
+def _boxes_group_changed(prev_boxes, curr_boxes, iou_thr=0.5) -> bool:
+    # prev_boxes / curr_boxes: list[dict]，至少含 'bbox' 和 'type'
+    # 返回 True 表示“异常人群发生了变化”（需要 group_id 自增）
+
+    if len(prev_boxes) != len(curr_boxes):
+        return True
+
+    if len(curr_boxes) == 0:
+        # 都是 0 个：视作没变化（此时 group_id 保持，下一次有异常时会重新自增）
+        return False
+
+    used = [False] * len(curr_boxes)
+
+    for p in prev_boxes:
+        pb = p["bbox"]
+        p_type = p.get("type")
+        best_iou = 0.0
+        best_idx = -1
+
+        for j, c in enumerate(curr_boxes):
+            if used[j]:
+                continue
+            if c.get("type") != p_type:
+                continue
+            iou = _iou(pb, c["bbox"])
+            if iou > best_iou:
+                best_iou = iou
+                best_idx = j
+
+        # 如果没有找到同类型且 IoU 足够大的匹配，认为换人了
+        if best_idx == -1 or best_iou < iou_thr:
+            return True
+
+        used[best_idx] = True
+
+    # 所有 prev box 都能匹配到 curr 中的某个 box → 视作“同一批人”
+    return False
+
 
 def push_event(event: dict):
     # 内部用：压入事件队列, HTTP用法
@@ -78,7 +134,12 @@ def _detection_loop(cfg: Config):
     )
 
     frame_idx = 0
-    last_msg_time = 0.0
+
+    group_id = 0  # 当前异常人群 id（自增）
+    prev_boxes_for_group = []  # 上一轮用于对比分组的 boxes
+    prev_count = 0  # 上一轮异常人数
+    last_boxes_update_time = 0.0  # 上一次“带 boxes 的消息”时间（仅在 count>0 时更新）
+
 
     while True:
         cap = cv2.VideoCapture(cfg.RTSP_URL)
@@ -123,6 +184,8 @@ def _detection_loop(cfg: Config):
             )
 
             all_boxes = head_boxes + raise_boxes
+            curr_count = len(all_boxes)
+
             # 更新当前状态，给 /status 用
             _update_state(
                 abnormal = (len(all_boxes) > 0),
@@ -131,12 +194,36 @@ def _detection_loop(cfg: Config):
 
             # 按时间节流发 json，不管有无异常都发送
             now_ts = time.time()
-            if now_ts - last_msg_time >= cfg.FRAME_MSG_INTERVAL:
-                msg = make_abnormal_frame(all_boxes)
-                push_event(msg)  # 支持 HTTP调试使用
-                broadcast_event(msg)
-                last_msg_time = now_ts
+            send_msg = False
 
+            if curr_count > 0:
+                if prev_count == 0:
+                    group_change = True
+                else:
+                    if _boxes_group_changed(prev_boxes_for_group, curr_count):
+                        group_change = True
+
+                if group_change:
+                    group_id += 1
+                    prev_boxes_for_group = [b.copy() for b in all_boxes]
+
+            if curr_count != prev_count:
+                send_msg = True
+
+            elif curr_count > 0 and (now_ts - last_boxes_update_time >= cfg.FRAME_MSG_INTERVAL):
+                send_msg = True
+
+            if send_msg:
+                msg = make_abnormal_frame(all_boxes, group_id)
+                push_event(msg)
+                broadcast_event(msg)
+
+                if curr_count > 0:
+                    last_boxes_update_time = now_ts
+
+                print(f"[AbnormalMsg] id={group_id}, count={curr_count}")
+
+            prev_count = curr_count
 
 def start_detection_thread(cfg: Config):
     # 在 run_server.py 里调用，起一个守护线程跑 _detection_loop

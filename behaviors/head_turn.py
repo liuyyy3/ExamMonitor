@@ -179,7 +179,7 @@ def detect_head_turns(
                 "label": label,
                 "prob": float(prob),
                 "type": "head_turn",
-                "color": '#ff0000'
+                "color": '#ff0000'  # 红色
             })
 
     return abnormal_boxes, total_person
