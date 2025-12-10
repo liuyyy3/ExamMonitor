@@ -19,7 +19,7 @@ from behaviors.head_turn import detect_head_turns
 from behaviors.raise_hand import detect_raise_hands
 
 from utils.json_schema import make_abnormal_frame
-from socket_sever.event_sever import broadcast_event
+from socket_sever.udp_multicast import send_json
 
 # 事件队列：routes.py 从这里取事件
 _event_queue: queue.Queue = queue.Queue()
@@ -216,7 +216,7 @@ def _detection_loop(cfg: Config):
             if send_msg:
                 msg = make_abnormal_frame(all_boxes, group_id)
                 push_event(msg)
-                broadcast_event(msg)
+                send_msg(msg)
 
                 if curr_count > 0:
                     last_boxes_update_time = now_ts
@@ -230,4 +230,3 @@ def start_detection_thread(cfg: Config):
     t = threading.Thread(target=_detection_loop, args=(cfg,), daemon=True)
     t.start()
     print("[Main] Detection thread started.")
-

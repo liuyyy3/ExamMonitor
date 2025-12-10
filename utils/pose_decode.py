@@ -8,7 +8,13 @@
 import numpy as np
 import cv2
 
+POSE_CONF_THR = 0.3
+NMS_THRESH = 0.4
+
 CLASSES = ["person"]
+
+nmsThresh = NMS_THRESH
+objectThresh = POSE_CONF_THR
 
 def letterbox_resize(image, size, bg_color):
     if isinstance(image, str):
@@ -180,5 +186,3 @@ def decode_yolov8_pose(outputs, aspect_ratio, offset_x, offset_y):
         })
 
     return results
-
-

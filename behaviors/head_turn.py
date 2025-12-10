@@ -183,5 +183,3 @@ def detect_head_turns(
             })
 
     return abnormal_boxes, total_person
-
-

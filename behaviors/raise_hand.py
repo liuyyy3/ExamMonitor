@@ -125,6 +125,3 @@ def detect_raise_hands(
                 "type": "raise_hand",
                 "color": "#00ff00"  # 绿色
             })
-
-
-

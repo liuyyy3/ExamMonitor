@@ -40,6 +40,3 @@ def make_abnormal_frame(boxes, group_id: int):
         msg["boxes"] = result_boxes
 
     return msg
-
-
-
