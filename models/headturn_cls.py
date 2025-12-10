@@ -15,10 +15,10 @@ STD  = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
 SKELETON_SIZE = 224  # 输入大小
 
-def softmax_np(x, axis=-1):
-    x = x - np.max(x, axis=axis, keepdims=True)
+def softmax_vec(x: np.ndarray) -> np.ndarray:
+    x = x - np.max(x)
     e = np.exp(x)
-    return e / np.sum(e, axis=axis, keepdims=True)
+    return e / np.sum(e)
 
 class HeadTurnClassifier:
     def __init__(self, model_path: str, class_names):
@@ -52,13 +52,19 @@ class HeadTurnClassifier:
 
         return img
 
-    def predict_single(self, skel_bgr):
+    def predict_single(self, skel_bgr: np.ndarray):
         inp = self.preprocess_skeleton_bgr(skel_bgr)
-        out = self.rknn.inference(inputs=[inp], data_format="nchw")[0]
-        prob = softmax_np(out, axis=0)[0]
-        idx = int(np.argmax(prob))
+        outputs = self.rknn.inference(inputs=[inp], data_format='nchw')
+        logits = outputs[0][0]
+        probs = softmax_vec(logits)  # (2,)
+        idx = int(np.argmax(probs))
         label = self.class_names[idx]
-        pmax = float(prob[idx])
-        return label, pmax
+        pmax = float(probs[idx])
 
+    def release(self):
+        if self.rknn is not None:
+            self.rknn.release()
+            self.rknn = None
 
+    def __del__(self):
+        self.release()

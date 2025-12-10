@@ -114,7 +114,8 @@ def detect_raise_hands(
             continue
 
         kpts = np.concatenate(
-            [xy, conf.reshape(1, -1)], axis=-1
+            [xy, conf.reshape(-1, 1)],
+            axis=-1
         )
 
         if is_raise_hand(kpts):

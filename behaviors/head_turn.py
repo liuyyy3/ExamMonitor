@@ -172,6 +172,7 @@ def detect_head_turns(
         )
 
         label, prob = cls_model.predict_single(skel_canvas)
+        print(f"[DEBUG-CLS] label={label}, prob={prob:.3f}")
 
         if label == "turn_head" and prob >= head_turn_prob_thr:
             abnormal_boxes.append({
