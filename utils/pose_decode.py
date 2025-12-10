@@ -7,14 +7,9 @@
 
 import numpy as np
 import cv2
-
-POSE_CONF_THR = 0.3
-NMS_THRESH = 0.4
+from app.config import Config
 
 CLASSES = ["person"]
-
-nmsThresh = NMS_THRESH
-objectThresh = POSE_CONF_THR
 
 def letterbox_resize(image, size, bg_color):
     if isinstance(image, str):
@@ -68,8 +63,9 @@ def IOU(xmin1, ymin1, xmax1, ymax1, xmin2, ymin2, xmax2, ymax2):
     return innerArea / total
 
 
-def NMS(detectResult):
+def NMS(cfg: Config, detectResult):
     predBoxs = []
+    nmsThresh = cfg.NMS_THRESH
 
     sort_detectboxs = sorted(detectResult, key=lambda x: x.score, reverse=True)
 
@@ -102,8 +98,10 @@ def softmax_np(x, axis=-1):
     e = np.exp(x)
     return e / np.sum(e, axis=axis, keepdims=True)
 
-def process_yolo_level(out, keypoints, index, model_w, model_h, stride,
+def process_yolo_level(cfg: Config, out, keypoints, index, model_w, model_h, stride,
                        scale_w=1, scale_h=1):
+    objectThresh = cfg.POSE_CONF_THR
+
     xywh = out[:, :64, :]
     conf = sigmoid(out[:, 64:, :])
     outputs = []
