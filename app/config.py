@@ -4,9 +4,23 @@
 # @Date  : 2025/12/5 15:15
 
 # 配置（视频源、模型路径、阈值等）
-
+import os
+from pathlib import Path
 
 class Config:
+
+    # Node服务地址
+    NODE_BASE = os.getenv('NODE_BASE', "http://192.168.9.60:8080")  # NODE_BASE要换成node的实际地址
+    # 具体接口以后定，先用 warning
+    REPORT_URL = f"{NODE_BASE}/warning/alg_exam_alarm"
+    # 鉴定权限，如果 node需要
+    TOKEN = os.getenv("NODE_TOKEN", "")  # 前端的告警上报接口，从这里上报告警信息，node需要校验 token
+
+    # 截图保存目录（你根据实际环境写个绝对路径）
+    SNAP_DIR = Path(os.getenv("EXAM_SNAP_DIR", "/home/tom/ExamMonitor/snapshots"))
+    CAMERA_NAME = os.getenv("EXAM_CAMERA_NAME", "exam_room1")
+
+    # 基础配置信息
     RTSP_URL = ""
     POSE_RKNN_PATH = '/home/tom/test_program/model/yolov8n-pose.rknn'
     CLS_RKNN_PATH = '/home/tom/test_program/model/MobileNetV2_1.rknn'

@@ -9,6 +9,8 @@
 import threading
 import time
 import queue
+from pathlib import Path
+
 import cv2
 from Cython.Build.Dependencies import normalize_existing
 
@@ -20,6 +22,7 @@ from behaviors.raise_hand import detect_raise_hands
 
 from utils.json_schema import make_abnormal_frame
 from socket_sever.udp_multicast import send_json
+from utils.reporter import report_exam_alarm
 
 # 事件队列：routes.py 从这里取事件
 _event_queue: queue.Queue = queue.Queue()
@@ -195,6 +198,7 @@ def _detection_loop(cfg: Config):
             # 按时间节流发 json，不管有无异常都发送
             now_ts = time.time()
             send_msg = False
+            need_report_to_node = False
 
             if curr_count > 0:
                 if prev_count == 0:
@@ -206,17 +210,31 @@ def _detection_loop(cfg: Config):
                 if group_change:
                     group_id += 1
                     prev_boxes_for_group = [b.copy() for b in all_boxes]
+                    need_report_to_node = True
+
 
             if curr_count != prev_count:
                 send_msg = True
-
             elif curr_count > 0 and (now_ts - last_boxes_update_time >= cfg.FRAME_MSG_INTERVAL):
                 send_msg = True
 
             if send_msg:
-                msg = make_abnormal_frame(all_boxes, group_id)
-                push_event(msg)
-                send_msg(msg)
+                event_json = make_abnormal_frame(all_boxes, group_id)
+                send_json(event_json)
+
+                if need_report_to_node and curr_count > 0:
+                    snap_dir: Path = cfg.SNAP_DIR
+                    snap_dir.mkdir(exist_ok=True, parents=True)
+
+                    ts_str = time.strftime("%Y%m%d_%H%M%S", time.localtime(now_ts))
+                    filename = f"exam_{Config.CAMERA_NAME}_gid{group_id}_{ts_str}.jpg"
+                    img_path = snap_dir / filename
+
+                    cv2.imwrite(str(img_path), frame)
+                    print("[Detection] 已保存截图:", img_path)
+
+                    # 调用 reporter，把 event_json + imgPath 写库
+                    report_exam_alarm(event_json, str(img_path))
 
                 if curr_count > 0:
                     last_boxes_update_time = now_ts

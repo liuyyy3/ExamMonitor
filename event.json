@@ -13,3 +13,17 @@
     }
   ]
 }
+{
+                "id": 1,
+                "MediaName": "1",                           //视频通道
+                "MediaUrl": "rtsp://192.168.100.1:554/1",   //视频通道url
+                "ResultType":["口罩"],                       //告警类型
+                "ResultDescription":"",     // 告警任务(详情里面是告警类别)
+                "imgPath":"",                              //图片路径
+                "UploadReason": "", // 上报原因
+                "Uploadstatus": "1", // 上报状态 1: 已上报 2: 未上报
+                "Uploadvideo_path": "", // 上报视频路径
+                "UserData": {}, // 算法涉及的信息
+                "created_at": "2021-08-12 10:00:00"
+
+               }
