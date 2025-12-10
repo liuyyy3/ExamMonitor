@@ -12,11 +12,10 @@ MULTICAST_PORT = 6000           # 端口号
 
 _sock = None
 
-
 def init_multicast(group: str = None, port: int = None, ttl: int = 1):
     # 在 run_server.py 里调用一次，用来初始化 UDP 组播 socket。
     # group: 组播 IP， port: 端口， ttl: 组播包的 TTL，1 表示只在本地网段，不出网关
-    # global _sock, MULTICAST_GROUP, MULTICAST_PORT
+    global _sock, MULTICAST_GROUP, MULTICAST_PORT
 
     if group is not None:
         MULTICAST_GROUP = group

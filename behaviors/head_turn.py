@@ -171,7 +171,10 @@ def detect_head_turns(
             h_box, w_box, xy_local, conf, conf_thr=kp_conf_thr
         )
 
-        label, prob = cls_model.predict_single(skel_canvas)
+        res = cls_model.predict_single(skel_canvas)
+        if res is None:
+            continue
+        label, prob = res
         print(f"[DEBUG-CLS] label={label}, prob={prob:.3f}")
 
         if label == "turn_head" and prob >= head_turn_prob_thr:

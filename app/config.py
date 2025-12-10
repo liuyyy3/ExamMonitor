@@ -23,8 +23,11 @@ class Config:
     # 基础配置信息
     RTSP_URL = "rtsp://192.168.9.140:8554/stream1"
     POSE_RKNN_PATH = '/home/tom/test_program/model/yolov8n-pose.rknn'
-    CLS_RKNN_PATH = '/home/tom/test_program/model/MobileNetV2_1.rknn'
+    CLS_RKNN_PATH = '/home/tom/test_program/model/mobilenet_cs12_fp32_nonorm.rknn'
     CLASS_NAMES = ['normal', 'turn_head']
+
+    # 上传json文件的间隔，为了保持前端画的框跟得上人物
+    FRAME_MSG_INTERVAL = 1.0
 
     # 5) YOLO-pose 阈值
     POSE_INPUT_SIZE = (640, 640)

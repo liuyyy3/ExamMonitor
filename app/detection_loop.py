@@ -201,11 +201,13 @@ def _detection_loop(cfg: Config):
             send_msg = False
             need_report_to_node = False
 
+            group_change = False
+
             if curr_count > 0:
                 if prev_count == 0:
                     group_change = True
                 else:
-                    if _boxes_group_changed(prev_boxes_for_group, curr_count):
+                    if _boxes_group_changed(prev_boxes_for_group, all_boxes):
                         group_change = True
 
                 if group_change:

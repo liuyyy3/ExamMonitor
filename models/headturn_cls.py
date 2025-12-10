@@ -60,6 +60,7 @@ class HeadTurnClassifier:
         idx = int(np.argmax(probs))
         label = self.class_names[idx]
         pmax = float(probs[idx])
+        return label, pmax
 
     def release(self):
         if self.rknn is not None:
