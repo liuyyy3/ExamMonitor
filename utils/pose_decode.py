@@ -98,9 +98,9 @@ def softmax_np(x, axis=-1):
     e = np.exp(x)
     return e / np.sum(e, axis=axis, keepdims=True)
 
-def process_yolo_level(cfg: Config, out, keypoints, index, model_w, model_h, stride,
+def process_yolo_level(out, keypoints, index, model_w, model_h, stride,
                        scale_w=1, scale_h=1):
-    objectThresh = cfg.POSE_CONF_THR
+    objectThresh = Config.POSE_CONF_THR
 
     xywh = out[:, :64, :]
     conf = sigmoid(out[:, 64:, :])

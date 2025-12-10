@@ -40,7 +40,7 @@ class PoseInfer:
         infer_img = letterbox_img[..., ::-1]
         infer_img = infer_img.transpose(2, 0, 1)
         infer_img = np.expand_dims(infer_img, 0).astype("uint8")
-        outputs = self.rknn.predict(inputs = [infer_img], data_format="nchw")
+        outputs = self.rknn.inference(inputs=[infer_img])
         pose_results = decode_yolov8_pose(
             outputs,
             aspect_ratio = aspect_ratio,
