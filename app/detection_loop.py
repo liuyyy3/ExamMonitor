@@ -166,6 +166,7 @@ def _detection_loop(cfg: Config):
 
             # 1) YOLO-pose 检测（只返回 person + 关键点）
             pose_results = pose_model.infer(frame)
+            print(f"[DEBUG] frame_idx={frame_idx}, pose_num={len(pose_results)}")
 
             # 用骨架 + 分类器 做转头判断
             head_boxes, _ = detect_head_turns(
@@ -183,6 +184,8 @@ def _detection_loop(cfg: Config):
                 pose_results,
                 kp_conf_thr=cfg.KP_CONF_THR,
             )
+
+            print(f"[DEBUG] head_boxes={len(head_boxes)}, raise_boxes={len(raise_boxes)}")
 
             all_boxes = head_boxes + raise_boxes
             curr_count = len(all_boxes)

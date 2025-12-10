@@ -117,7 +117,7 @@ def detect_raise_hands(
             [xy, conf.reshape(1, -1)], axis=-1
         )
 
-        if is_raise_hand(kpts, kp_conf_thr):
+        if is_raise_hand(kpts):
             abnormal_boxes.append({
                 "bbox": (int(x1), int(y1), int(x2), int(y2)),
                 "label":"raise_hand",
@@ -125,3 +125,4 @@ def detect_raise_hands(
                 "type": "raise_hand",
                 "color": "#00ff00"  # 绿色
             })
+    return abnormal_boxes, total_person

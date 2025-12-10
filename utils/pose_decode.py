@@ -63,9 +63,9 @@ def IOU(xmin1, ymin1, xmax1, ymax1, xmin2, ymin2, xmax2, ymax2):
     return innerArea / total
 
 
-def NMS(cfg: Config, detectResult):
+def NMS(detectResult):
     predBoxs = []
-    nmsThresh = cfg.NMS_THRESH
+    nmsThresh = Config.NMS_THRESH
 
     sort_detectboxs = sorted(detectResult, key=lambda x: x.score, reverse=True)
 

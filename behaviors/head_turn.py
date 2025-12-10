@@ -137,7 +137,7 @@ def detect_head_turns(
     H, W = frame_bgr.shape[:2]
 
     abnormal_boxes = []
-    total_person = []
+    total_person = 0
 
     for det in pose_results:
         if det['class_id'] != 0:
