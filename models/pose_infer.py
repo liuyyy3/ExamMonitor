@@ -6,7 +6,6 @@
 # 封装 YOLO-pose.rknn 推理、解码关键点
 
 import numpy as np
-from Cython.Utility.MemoryView import offset
 from rknn.api import RKNN
 
 from utils.pose_decode import letterbox_resize, decode_yolov8_pose

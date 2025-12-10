@@ -10,9 +10,7 @@ import threading
 import time
 import queue
 from pathlib import Path
-
 import cv2
-from Cython.Build.Dependencies import normalize_existing
 
 from app.config import Config
 from models.pose_infer import PoseInfer
@@ -220,14 +218,20 @@ def _detection_loop(cfg: Config):
 
             if send_msg:
                 event_json = make_abnormal_frame(all_boxes, group_id)
-                send_json(event_json)
+
+                # 调试用打印输出
+                print("\n=== 发送给前端的 JSON ===")
+                print(event_json)
+
+                send_json(event_json)  # 先 UDP发送给前端
 
                 if need_report_to_node and curr_count > 0:
                     snap_dir: Path = cfg.SNAP_DIR
                     snap_dir.mkdir(exist_ok=True, parents=True)
 
                     ts_str = time.strftime("%Y%m%d_%H%M%S", time.localtime(now_ts))
-                    filename = f"exam_{Config.CAMERA_NAME}_gid{group_id}_{ts_str}.jpg"
+
+                    filename = f"exam_{Config.CAMERA_NAME}_{ts_str}_{curr_count}.jpg"
                     img_path = snap_dir / filename
 
                     cv2.imwrite(str(img_path), frame)

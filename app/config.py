@@ -21,7 +21,7 @@ class Config:
     CAMERA_NAME = os.getenv("EXAM_CAMERA_NAME", "exam_room1")
 
     # 基础配置信息
-    RTSP_URL = ""
+    RTSP_URL = "rtsp://192.168.9.140:8554/stream1"
     POSE_RKNN_PATH = '/home/tom/test_program/model/yolov8n-pose.rknn'
     CLS_RKNN_PATH = '/home/tom/test_program/model/MobileNetV2_1.rknn'
     CLASS_NAMES = ['normal', 'turn_head']

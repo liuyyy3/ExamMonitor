@@ -7,9 +7,6 @@
 
 from datetime import datetime, timezone
 
-from test import results
-
-
 def _now_iso():
     # UTC ISO8601
     return datetime.now(timezone.utc).isoformat()

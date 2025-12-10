@@ -17,6 +17,10 @@ def report_exam_alarm(event_json: dict, img_path: str):
     payload["MediaUrl"] = getattr(Config, "RTSP_URL", "")
     payload["imgPath"] = str(img_path or "")
 
+    # 调试用打印输出
+    print("\n=== POST 给 Node 的 JSON ===")
+    print(payload)
+
     headers = {}
     if Config.TOKEN:
         headers["Authorization"] = f"Bearer {Config.TOKEN}"
