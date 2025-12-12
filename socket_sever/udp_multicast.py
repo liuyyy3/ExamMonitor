@@ -8,7 +8,7 @@ import json
 
 # 默认组播地址和端口
 MULTICAST_GROUP = "239.0.0.10"   # 组播地址
-MULTICAST_PORT = 6000           # 端口号
+MULTICAST_PORT = 6000     # 端口号
 
 _sock = None
 
@@ -47,3 +47,4 @@ def send_json(msg: dict):
 
     data = (json.dumps(msg, ensure_ascii=False) + "\n").encode("utf-8")
     _sock.sendto(data, (MULTICAST_GROUP, MULTICAST_PORT))
+

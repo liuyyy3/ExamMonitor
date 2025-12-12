@@ -32,6 +32,40 @@ _current_boxes = []  # 当前异常框（list[dict]），结构和 event 里的 
 # 保护状态的锁
 _state_lock = threading.Lock()
 
+def _hex_to_bgr(color_str: str):
+    """把 '#rrggbb' 转成 OpenCV 用的 BGR 三元组"""
+    if not color_str:
+        return (0, 0, 255)
+    s = color_str.lstrip("#")
+    if len(s) != 6:
+        return (0, 0, 255)
+    r = int(s[0:2], 16)
+    g = int(s[2:4], 16)
+    b = int(s[4:6], 16)
+    return (b, g, r)
+
+
+def _draw_boxes_on_frame(frame, boxes):
+    """在图像上画出 all_boxes 里的框，颜色来自 box['color']"""
+    vis = frame.copy()
+    for box in boxes:
+        x1, y1, x2, y2 = box["bbox"]
+        color_str = box.get("color", "#ff0000")
+        color = _hex_to_bgr(color_str)
+        cv2.rectangle(vis, (int(x1), int(y1)), (int(x2), int(y2)), color, 2)
+
+        # 如果你想在图上写文字，可以顺便把 label 也写上：
+        label = box.get("type", "")
+        if label:
+            cv2.putText(
+                vis, label,
+                (int(x1), int(y1) - 5),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6, color, 2, cv2.LINE_AA
+            )
+    return vis
+
+
 def _iou(b1, b2):
     x1, y1, x2, y2 = b1
     x1b, y1b, x2b, y2b = b2
@@ -223,6 +257,9 @@ def _detection_loop(cfg: Config):
 
             if send_msg:
                 event_json = make_abnormal_frame(all_boxes, group_id)
+                H, W = frame.shape[:2]
+                event_json["frame_w"] = W
+                event_json["frame_h"] = H
 
                 # 调试用打印输出
                 print("\n=== 发送给前端的 JSON ===")
@@ -235,11 +272,13 @@ def _detection_loop(cfg: Config):
                     snap_dir.mkdir(exist_ok=True, parents=True)
 
                     ts_str = time.strftime("%Y%m%d_%H%M%S", time.localtime(now_ts))
-
-                    filename = f"exam_{Config.CAMERA_NAME}_{ts_str}_{curr_count}.jpg"
+                    room_name = getattr(Config, "CAMERA_NAME", "exam_room1")
+                    filename = f"{room_name}_{ts_str}_{curr_count}.jpg"
                     img_path = snap_dir / filename
 
-                    cv2.imwrite(str(img_path), frame)
+                    vis_frame = _draw_boxes_on_frame(frame, all_boxes)
+
+                    cv2.imwrite(str(img_path), vis_frame)
                     print("[Detection] 已保存截图:", img_path)
 
                     # 调用 reporter，把 event_json + imgPath 写库
