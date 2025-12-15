@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-12-12T02:52:24.834661+00:00",
+  "timestamp": "2025-12-12T07:54:58.398478+00:00",
   "abnormal_count": 4,
   "id": 4,
   "boxes": [
@@ -16,6 +16,9 @@
       "type": "head_turn", "x": 1566, "y": 435, "w": 125, "h": 188, "color": "#ff0000"
     }
   ],
-  "frame_w": 2560,
-  "frame_h": 1440
+  "MediaUrl": "rtsp://192.168.9.140:8554/stream1",
+  "imgPath": "/home/tom/ExamMonitor/snapshots/exam_room1_20251212_155458_1.jpg"
 }
+
+
+

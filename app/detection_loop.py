@@ -144,7 +144,7 @@ def _update_state(abnormal: bool, boxes):
         _current_boxes = boxes if abnormal else []
 
 def get_current_state():
-    """routes 调用：返回当前状态（只读）"""
+    # routes 调用：返回当前状态（只读）
     with _state_lock:
         return {
             "abnormal": _current_abnormal,
@@ -175,6 +175,8 @@ def _detection_loop(cfg: Config):
     prev_count = 0  # 上一轮异常人数
     last_boxes_update_time = 0.0  # 上一次“带 boxes 的消息”时间（仅在 count>0 时更新）
 
+    last_infer_ms = 0
+    cached_event_json = None  # 用于显示最近消息
 
     while True:
         cap = cv2.VideoCapture(cfg.RTSP_URL)
@@ -193,12 +195,19 @@ def _detection_loop(cfg: Config):
                 time.sleep(cfg.RECONNECT_INTERVAL_SEC)
                 break  # 跳出内层 while，重新走外层，重连 RTSP
 
-            frame_idx += 1
-            # 跳帧检测
-            if cfg.FRAME_STRIDE > 1 and (frame_idx % cfg.FRAME_STRIDE != 0):
-                continue
+            now_ms = int(time.time() * 1000)
+            interval = int(getattr(cfg, "INFER_INTERVAL_MS", 1))
 
-            # 1) YOLO-pose 检测（只返回 person + 关键点）
+            if interval > 0 and (now_ms - last_infer_ms) < interval:
+                continue
+            last_infer_ms = now_ms
+
+            frame_idx += 1
+            # # 跳帧检测
+            # if cfg.FRAME_STRIDE > 1 and (frame_idx % cfg.FRAME_STRIDE != 0):
+            #     continue
+
+            # YOLO-pose 检测（只返回 person + 关键点）
             pose_results = pose_model.infer(frame)
             print(f"[DEBUG] frame_idx={frame_idx}, pose_num={len(pose_results)}")
 
@@ -237,6 +246,7 @@ def _detection_loop(cfg: Config):
 
             group_change = False
 
+            # 向前端发送 json的规则
             if curr_count > 0:
                 if prev_count == 0:
                     group_change = True
@@ -249,6 +259,8 @@ def _detection_loop(cfg: Config):
                     prev_boxes_for_group = [b.copy() for b in all_boxes]
                     need_report_to_node = True
 
+            if curr_count > 0 and(not group_change):
+                prev_boxes_for_group = [b.copy() for b in all_boxes]
 
             if curr_count != prev_count:
                 send_msg = True
@@ -271,8 +283,9 @@ def _detection_loop(cfg: Config):
                     snap_dir: Path = cfg.SNAP_DIR
                     snap_dir.mkdir(exist_ok=True, parents=True)
 
+                    # 保存图片时候的命名规则
                     ts_str = time.strftime("%Y%m%d_%H%M%S", time.localtime(now_ts))
-                    room_name = getattr(Config, "CAMERA_NAME", "exam_room1")
+                    room_name = getattr(cfg, "CAMERA_NAME", "exam_room1")
                     filename = f"{room_name}_{ts_str}_{curr_count}.jpg"
                     img_path = snap_dir / filename
 
