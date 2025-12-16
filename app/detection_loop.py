@@ -22,6 +22,8 @@ from utils.json_schema import make_abnormal_frame
 from socket_sever.udp_multicast import send_json
 from utils.reporter import report_exam_alarm
 
+from socket_sever.rtsp_state import get_rtsp_url
+
 # 事件队列：routes.py 从这里取事件
 _event_queue: queue.Queue = queue.Queue()
 
@@ -178,20 +180,53 @@ def _detection_loop(cfg: Config):
     last_infer_ms = 0
     cached_event_json = None  # 用于显示最近消息
 
+    cap = None
+    current_url = None
+
+
     while True:
-        cap = cv2.VideoCapture(cfg.RTSP_URL)
+        desired_url = get_rtsp_url() or getattr(cfg, "RTSP_URL", None)
+        if not desired_url:
+            time.sleep(0.2)
+            continue
+
+        cap = cv2.VideoCapture(desired_url)
+        current_url = desired_url
         if not cap.isOpened():
-            print(f"[DetectionLoop] RTSP 打不开，{cfg.RECONNECT_INTERVAL_SEC}s 后重试: {cfg.RTSP_URL}")
+            print(f"[DetectionLoop] RTSP 打不开，{cfg.RECONNECT_INTERVAL_SEC}s 后重试: {desired_url}")
             time.sleep(cfg.RECONNECT_INTERVAL_SEC)
             continue
 
-        print("[DetectionLoop] RTSP 打开成功，开始检测")
-
         while True:
+            desired_url = get_rtsp_url() or getattr(cfg, "RTSP_URL", None)
+            if not desired_url:
+                time.sleep(0.2)
+                break
+
+            if cap is None or desired_url != current_url:
+                if cap is not None:
+                    try:
+                        cap.release()
+                    except Exception:
+                        pass
+
+                current_url = desired_url
+                cap = cv2.VideoCapture(current_url)
+                if not cap.isOpened():
+                    print(f"[RTSP] switch failed, {cfg.RECONNECT_INTERVAL_SEC}s retry: {current_url}")
+                    time.sleep(cfg.RECONNECT_INTERVAL_SEC)
+                    continue
+                print(f"[RTSP] switch to: {current_url}")
+
+                # 切换流后重置一些计时器，避免立刻触发定时发送
+                last_infer_ms = 0
+                last_boxes_update_time = 0.0
+
             ret, frame = cap.read()
             if not ret:
                 print("[DetectionLoop] 读取帧失败，准备重连 RTSP ...")
                 cap.release()
+                cap = None
                 time.sleep(cfg.RECONNECT_INTERVAL_SEC)
                 break  # 跳出内层 while，重新走外层，重连 RTSP
 
@@ -239,7 +274,7 @@ def _detection_loop(cfg: Config):
                 boxes = all_boxes,
             )
 
-            # 按时间节流发 json，不管有无异常都发送
+            # curr_count==0 且没变化时不会定时发，只会在从有异常→0 的那一刻发一次
             now_ts = time.time()
             send_msg = False
             need_report_to_node = False

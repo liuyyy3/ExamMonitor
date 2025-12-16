@@ -3,6 +3,7 @@
 # @Author: Xinghui
 # @Date  : 2025/12/9 18:07
 
+# 将检测结果的信息以 json 文件的形式发给前端，起 udp 线程，发组播
 import socket
 import json
 
@@ -47,4 +48,3 @@ def send_json(msg: dict):
 
     data = (json.dumps(msg, ensure_ascii=False) + "\n").encode("utf-8")
     _sock.sendto(data, (MULTICAST_GROUP, MULTICAST_PORT))
-
