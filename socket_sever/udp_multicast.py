@@ -8,7 +8,7 @@ import socket
 import json
 
 # 默认组播地址和端口
-MULTICAST_GROUP = "239.0.0.10"   # 组播地址
+MULTICAST_GROUP = "127.0.0.1"   # 组播地址
 MULTICAST_PORT = 6000     # 端口号
 
 _sock = None
@@ -37,7 +37,6 @@ def init_multicast(group: str = None, port: int = None, ttl: int = 1):
 
     _sock = sock
     print(f"[UDP-MCAST] init ok, group={MULTICAST_GROUP}, port={MULTICAST_PORT}, ttl={ttl}")
-
 
 def send_json(msg: dict):
     # 把字典转成 JSON + 换行，通过 UDP 组播发出去

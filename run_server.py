@@ -18,7 +18,7 @@ app = create_app()
 
 
 if __name__ == '__main__':
-    init_multicast(group="239.0.0.10", port=6000, ttl=1)
+    init_multicast(group="127.0.0.1", port=6000, ttl=1)
     stop_event = threading.Event()
     start_rtsp_config_rx(stop_event)  # 监听 239.0.0.10:6001
     start_detection_thread(config)
