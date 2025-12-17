@@ -46,9 +46,8 @@ def _hex_to_bgr(color_str: str):
     b = int(s[4:6], 16)
     return (b, g, r)
 
-
 def _draw_boxes_on_frame(frame, boxes):
-    """在图像上画出 all_boxes 里的框，颜色来自 box['color']"""
+    # 在图像上画出 all_boxes 里的框，颜色来自 box['color']
     vis = frame.copy()
     for box in boxes:
         x1, y1, x2, y2 = box["bbox"]
@@ -84,6 +83,96 @@ def _iou(b1, b2):
     if union <= 0:
         return 0.0
     return inter / union
+
+
+class BoxSmoother:
+    # raw_boxes: list[dict]  每个 dict 至少包含: type,x,y,w,h,color
+    # 输出: 平滑后的 list[dict]
+
+    def __init__(self, miss_max=2, ema_alpha=0.6, match_iou=0.2):
+        self.miss_max = miss_max
+        self.ema_alpha = ema_alpha
+        self.match_iou = match_iou
+        self.tracks = {}   # tid -> track
+        self._next_id = 1
+
+    def _new_track(self, b, now_ts):
+        tid = self._next_id
+        self._next_id += 1
+        self.tracks[tid] = {
+            "type": b.get("type", ""),
+            "color": b.get("color", "#ff0000"),
+            "bbox": [float(v) for v in b["bbox"]],
+            "miss": 0,
+            "last_ts": now_ts,
+        }
+        return tid
+
+    def update(self, raw_boxes, now_ts):
+        matched_tids = set()
+
+        # 1) 逐个 raw box 去匹配老 track（同 type + IoU 最大）
+        for b in raw_boxes:
+            if "bbox" not in b:
+                continue
+            b_type = b.get("type", "")
+            b_bbox = [float(v) for v in b["bbox"]]
+
+            best_tid = None
+            best_iou = 0.0
+            for tid, tr in self.tracks.items():
+                if tr["type"] != b_type:
+                    continue
+                if tid in matched_tids:
+                    continue
+                iou = _iou(b_bbox, tr["bbox"])
+                if iou > best_iou:
+                    best_iou = iou
+                    best_tid = tid
+
+            if best_tid is not None and best_iou >= self.match_iou:
+                # 2) 匹配上：EMA 更新 bbox
+                tr = self.tracks[best_tid]
+                a = self.ema_alpha
+                old = tr["bbox"]
+                new = b_bbox
+                tr["bbox"] = [
+                    a * new[0] + (1 - a) * old[0],
+                    a * new[1] + (1 - a) * old[1],
+                    a * new[2] + (1 - a) * old[2],
+                    a * new[3] + (1 - a) * old[3],
+                ]
+                tr["miss"] = 0
+                tr["last_ts"] = now_ts
+                tr["color"] = b.get("color", tr["color"])
+                matched_tids.add(best_tid)
+            else:
+                # 3) 没匹配上：新建 track
+                tid = self._new_track(b, now_ts)
+                matched_tids.add(tid)
+
+        # 4) 没被匹配到的 track：miss += 1，超过阈值删除
+        to_del = []
+        for tid, tr in self.tracks.items():
+            if tid in matched_tids:
+                continue
+            tr["miss"] += 1
+            if tr["miss"] > self.miss_max:
+                to_del.append(tid)
+        for tid in to_del:
+            self.tracks.pop(tid, None)
+
+        # 5) 输出平滑后的 boxes（保持内部 bbox schema）
+        out = []
+        for tid, tr in self.tracks.items():
+            out.append({
+                "type": tr["type"],
+                "color": tr["color"],
+                "bbox": tr["bbox"],
+                # 可选：带上 tid，未来前端如果愿意可用它更稳
+                "tid": tid,
+            })
+        return out
 
 
 def _boxes_group_changed(prev_boxes, curr_boxes, iou_thr=0.5) -> bool:
@@ -170,6 +259,12 @@ def _detection_loop(cfg: Config):
         class_names=cfg.CLASS_NAMES,
     )
 
+    smoother = BoxSmoother(
+        miss_max=getattr(cfg, "BOX_MISS_MAX", 2),
+        ema_alpha=getattr(cfg, "BOX_EMA_ALPHA", 0.6),
+        match_iou=getattr(cfg, "BOX_MATCH_IOU", 0.2),
+    )
+
     frame_idx = 0
 
     group_id = 0  # 当前异常人群 id（自增）
@@ -182,7 +277,6 @@ def _detection_loop(cfg: Config):
 
     cap = None
     current_url = None
-
 
     while True:
         desired_url = get_rtsp_url() or getattr(cfg, "RTSP_URL", None)
@@ -265,8 +359,12 @@ def _detection_loop(cfg: Config):
 
             print(f"[DEBUG] head_boxes={len(head_boxes)}, raise_boxes={len(raise_boxes)}")
 
-            all_boxes = head_boxes + raise_boxes
+            raw_boxes = head_boxes + raise_boxes
+            now_ts = time.time()
+
+            all_boxes = smoother.update(raw_boxes, now_ts)
             curr_count = len(all_boxes)
+
 
             # 更新当前状态，给 /status 用
             _update_state(
