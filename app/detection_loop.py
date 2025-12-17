@@ -12,6 +12,14 @@ import queue
 from pathlib import Path
 import cv2
 
+import numpy as np
+try:
+    from PIL import Image, ImageDraw, ImageFont
+except ImportError:
+    Image = None
+    ImageDraw = None
+    ImageFont = None
+
 from app.config import Config
 from models.pose_infer import PoseInfer
 from models.headturn_cls import HeadTurnClassifier
@@ -31,6 +39,40 @@ _event_queue: queue.Queue = queue.Queue()
 _current_abnormal = False
 _current_boxes = []  # 当前异常框（list[dict]），结构和 event 里的 boxes 相同
 
+_FONT_PATH_CANDIDATES = [
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+    "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+    "/usr/share/fonts/truetype/arphic/ukai.ttf",
+    "/usr/share/fonts/truetype/arphic/uming.ttc",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+]
+_font_cache = {}
+
+
+def _get_label_font(font_size=18):
+    if ImageFont is None:
+        return None
+    if font_size in _font_cache:
+        return _font_cache[font_size]
+    for path in _FONT_PATH_CANDIDATES:
+        p = Path(path)
+        if p.exists():
+            try:
+                font = ImageFont.truetype(str(p), size=font_size)
+                _font_cache[font_size] = font
+                return font
+            except OSError:
+                continue
+
+    try:
+        font = ImageFont.load_default()
+        _font_cache[font_size] = font
+        return font
+    except Exception:
+        return None
+
 # 保护状态的锁
 _state_lock = threading.Lock()
 
@@ -49,6 +91,14 @@ def _hex_to_bgr(color_str: str):
 def _draw_boxes_on_frame(frame, boxes):
     # 在图像上画出 all_boxes 里的框，颜色来自 box['color']
     vis = frame.copy()
+
+    pil_image = None
+    draw = None
+    font = _get_label_font(18)
+    if Image is not None and font is not None:
+        pil_image = Image.fromarray(cv2.cvtColor(vis, cv2.COLOR_BGR2RGB))
+        draw = ImageDraw.Draw(pil_image)
+
     for box in boxes:
         x1, y1, x2, y2 = box["bbox"]
         color_str = box.get("color", "#ff0000")
@@ -57,13 +107,32 @@ def _draw_boxes_on_frame(frame, boxes):
 
         # 如果你想在图上写文字，可以顺便把 label 也写上：
         label = box.get("type", "")
-        if label:
+        # if label:
+        if not label:
+            continue
+        if draw is not None:
+            text = str(label)
+            try:
+                text_box = draw.textbbox((0, 0), text, font=font)
+                text_h = text_box[3] - text_box[1]
+            except Exception:
+                # 老版 Pillow
+                _, text_h = draw.textsize(text, font=font)
+
+            text_x = int(x1)
+            text_y = max(0, int(y1) - text_h - 4)
+            draw.text((text_x, text_y), text, font=font, fill=(255, 255, 255))
+        else:
+            # 回退到 OpenCV 内置字体（不支持中文，但至少不中断流程）
             cv2.putText(
                 vis, label,
                 (int(x1), int(y1) - 5),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.6, color, 2, cv2.LINE_AA
+                0.6, (255,255,255), 2, cv2.LINE_AA
             )
+
+    if pil_image is not None:
+        vis = cv2.cvtColor(np.asarray(pil_image), cv2.COLOR_RGB2BGR)
     return vis
 
 

@@ -27,7 +27,7 @@ def make_abnormal_frame(boxes, group_id: int):
         for box in boxes:
             x1, y1, x2, y2 = box["bbox"]
             result_boxes.append({
-                "type": box.get("type", "head_turn"),
+                "type": box.get("type", "转头"),
                 "x": int(x1),
                 "y": int(y1),
                 "w": int(x2 - x1),

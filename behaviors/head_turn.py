@@ -180,9 +180,9 @@ def detect_head_turns(
         if label == "turn_head" and prob >= head_turn_prob_thr:
             abnormal_boxes.append({
                 "bbox": (int(x1), int(y1), int(x2), int(y2)),
-                "label": label,
+                "label": "转头",
                 "prob": float(prob),
-                "type": "head_turn",
+                "type": "转头",
                 "color": '#ff0000'  # 红色
             })
 
