@@ -88,13 +88,16 @@ def _hex_to_bgr(color_str: str):
     b = int(s[4:6], 16)
     return (b, g, r)
 
-def _draw_boxes_on_frame(frame, boxes):
+def _draw_boxes_on_frame(frame, boxes, font_size=18, box_thickness=2):
     # 在图像上画出 all_boxes 里的框，颜色来自 box['color']
     vis = frame.copy()
 
+    font_size = max(1, int(font_size or 18))
+    box_thickness = max(1, int(box_thickness or 2))
+
     pil_image = None
     draw = None
-    font = _get_label_font(18)
+    font = _get_label_font(font_size)
     if Image is not None and font is not None:
         pil_image = Image.fromarray(cv2.cvtColor(vis, cv2.COLOR_BGR2RGB))
         draw = ImageDraw.Draw(pil_image)
@@ -103,9 +106,18 @@ def _draw_boxes_on_frame(frame, boxes):
         x1, y1, x2, y2 = box["bbox"]
         color_str = box.get("color", "#ff0000")
         color = _hex_to_bgr(color_str)
-        cv2.rectangle(vis, (int(x1), int(y1)), (int(x2), int(y2)), color, 2)
 
-        # 如果你想在图上写文字，可以顺便把 label 也写上：
+        if draw is not None:
+            outline_color = (color[2], color[1], color[0])
+            draw.rectangle(
+                [(int(x1), int(y1)), (int(x2), int(y2))],
+                outline=outline_color,
+                width=box_thickness,
+            )
+        else:
+            cv2.rectangle(vis, (int(x1), int(y1)), (int(x2), int(y2)), color, box_thickness)
+
+        # 如果想在图上写文字，可以顺便把 label 也写上：
         label = box.get("type", "")
         # if label:
         if not label:
@@ -121,14 +133,15 @@ def _draw_boxes_on_frame(frame, boxes):
 
             text_x = int(x1)
             text_y = max(0, int(y1) - text_h - 4)
-            draw.text((text_x, text_y), text, font=font, fill=(255, 255, 255))
+            draw.text((text_x, text_y), text, font=font, fill=outline_color)
         else:
             # 回退到 OpenCV 内置字体（不支持中文，但至少不中断流程）
+            font_scale = max(0.5, font_size / 30.0)
             cv2.putText(
                 vis, label,
                 (int(x1), int(y1) - 5),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.6, (255,255,255), 2, cv2.LINE_AA
+                font_scale,  color, max(1, box_thickness), cv2.LINE_AA
             )
 
     if pil_image is not None:
@@ -280,6 +293,46 @@ def _boxes_group_changed(prev_boxes, curr_boxes, iou_thr=0.5) -> bool:
         used[best_idx] = True
 
     # 所有 prev box 都能匹配到 curr 中的某个 box → 视作“同一批人”
+    return False
+
+# 新增一个函数功能，当框的移动过大的时候，就不给前端发送 json
+def _boxes_move_too_much(prev_boxes, curr_boxes, max_move_px):
+    if max_move_px <= 0:
+        return False
+    if len(prev_boxes) == 0 or len(curr_boxes) == 0:
+        return False
+
+    used = [False] * len(curr_boxes)
+
+    for p in prev_boxes:
+        pb = p["bbox"]
+        p_type = p.get("type")
+        best_iou = 0.0
+        best_idx = -1
+
+        for j, c in enumerate(curr_boxes):
+            if used[j]:
+                continue
+            if c.get("type") != p_type:
+                continue
+            iou = _iou(pb, c["bbox"])
+            if iou > best_iou:
+                best_iou = iou
+                best_idx = j
+
+        if best_idx == -1:
+            return True
+
+        used[best_idx] = True
+
+        cb = curr_boxes[best_idx]["bbox"]
+        px = (pb[0] + pb[2]) / 2.0
+        py = (pb[1] + pb[3]) / 2.0
+        cx = (cb[0] + cb[2]) / 2.0
+        cy = (cb[1] + cb[3]) / 2.0
+        if np.hypot(cx - px, cy - py) > max_move_px:
+            return True
+
     return False
 
 
@@ -470,39 +523,59 @@ def _detection_loop(cfg: Config):
                 send_msg = True
 
             if send_msg:
-                event_json = make_abnormal_frame(all_boxes, group_id)
+                # event_json = make_abnormal_frame(all_boxes, group_id)
+
+                if _boxes_move_too_much(
+                    prev_boxes_for_group,
+                    all_boxes,
+                    getattr(cfg, "BOX_MOVE_MAX_PX", 0),
+                ):
+                    print("[AbnormalMsg] skip send: boxes move too much")
+                    send_msg = False
+                    need_report_to_node = False
+                else:
+                    event_json = make_abnormal_frame(all_boxes, group_id)
+
                 H, W = frame.shape[:2]
-                event_json["frame_w"] = W
-                event_json["frame_h"] = H
+                if send_msg:
+                    event_json["frame_w"] = W
+                    event_json["frame_h"] = H
 
-                # 调试用打印输出
-                print("\n=== 发送给前端的 JSON ===")
-                print(event_json)
 
-                send_json(event_json)  # 先 UDP发送给前端
+                    # 调试用打印输出
+                    print("\n=== 发送给前端的 JSON ===")
+                    print(event_json)
 
-                if need_report_to_node and curr_count > 0:
-                    snap_dir: Path = cfg.SNAP_DIR
-                    snap_dir.mkdir(exist_ok=True, parents=True)
+                    send_json(event_json)  # 先 UDP发送给前端
 
-                    # 保存图片时候的命名规则
-                    ts_str = time.strftime("%Y%m%d_%H%M%S", time.localtime(now_ts))
-                    room_name = getattr(cfg, "CAMERA_NAME", "exam_room1")
-                    filename = f"{room_name}_{ts_str}_{curr_count}.jpg"
-                    img_path = snap_dir / filename
+                    if need_report_to_node and curr_count > 0:
+                        snap_dir: Path = cfg.SNAP_DIR
+                        snap_dir.mkdir(exist_ok=True, parents=True)
 
-                    vis_frame = _draw_boxes_on_frame(frame, all_boxes)
+                        # 保存图片时候的命名规则
+                        ts_str = time.strftime("%Y%m%d_%H%M%S", time.localtime(now_ts))
+                        room_name = getattr(cfg, "CAMERA_NAME", "exam_room1")
+                        filename = f"{room_name}_{ts_str}_{curr_count}.jpg"
+                        img_path = snap_dir / filename
 
-                    cv2.imwrite(str(img_path), vis_frame)
-                    print("[Detection] 已保存截图:", img_path)
+                    # vis_frame = _draw_boxes_on_frame(frame, all_boxes)
+                        vis_frame = _draw_boxes_on_frame(
+                            frame,
+                            all_boxes,
+                            font_size=getattr(cfg, "LABEL_FONT_SIZE", 18),
+                            box_thickness=getattr(cfg, "BOX_THICKNESS", 2),
+                        )
 
-                    # 调用 reporter，把 event_json + imgPath 写库
-                    report_exam_alarm(event_json, str(img_path))
+                        cv2.imwrite(str(img_path), vis_frame)
+                        print("[Detection] 已保存截图:", img_path)
 
-                if curr_count > 0:
-                    last_boxes_update_time = now_ts
+                        # 调用 reporter，把 event_json + imgPath 写库
+                        report_exam_alarm(event_json, str(img_path))
 
-                print(f"[AbnormalMsg] id={group_id}, count={curr_count}")
+                    if curr_count > 0:
+                        last_boxes_update_time = now_ts
+
+                    print(f"[AbnormalMsg] id={group_id}, count={curr_count}")
 
             prev_count = curr_count
 

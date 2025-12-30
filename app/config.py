@@ -6,11 +6,22 @@
 # 配置（视频源、模型路径、阈值等）
 import os
 from pathlib import Path
+import socket
+
+def get_host_ip():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+    finally:
+        s.close()
+
+    return ip
 
 class Config:
 
     # Node服务地址
-    NODE_BASE = os.getenv('NODE_BASE', "http://192.168.9.50:8080")  # NODE_BASE要换成node的实际地址
+    NODE_BASE = os.getenv('NODE_BASE', f"http://{get_host_ip()}:8080")  # NODE_BASE要换成node的实际地址
     # 具体接口以后定，先用 warning
     REPORT_URL = f"{NODE_BASE}/warning/alg_alarm_fetch"
     # 鉴定权限，如果 node需要
@@ -35,6 +46,10 @@ class Config:
     POSE_CONF_THR = 0.3  # 对应 objectThresh
     NMS_THRESH = 0.4
 
+    # 告警截图标注设置参数
+    LABEL_FONT_SIZE = int(os.getenv("EXAM_LABEL_FONT_SIZE", 18))   # 字体大小
+    BOX_THICKNESS = int(os.getenv("EXAM_BOX_THICKNESS", 2))   # 边框粗细
+
     # 关键点质量筛选
     KP_CONF_THR = 0.2
     MIN_VALID_KPTS = 3  # 上半身 0~12 中，大于阈值的点数
@@ -49,6 +64,9 @@ class Config:
 
     # 每隔多少毫秒做一次推理
     INFER_INTERVAL_MS = 100
+
+    # 异常框位移过大时不发送给前端（像素，<=0 表示不限制）
+    BOX_MOVE_MAX_PX = 120
 
 config = Config()
 

@@ -124,6 +124,7 @@ def detect_raise_hands(
                 "label":"举手",
                 "prob": 1.0,
                 "type": "举手",
-                "color": "#00ff00"  # 绿色
+                "color": "#ec6314"  # 从绿色更改为橘红色
+                # "color": "#00ff00"  # 绿色
             })
     return abnormal_boxes, total_person
