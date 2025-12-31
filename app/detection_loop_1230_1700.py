@@ -30,7 +30,6 @@ from behaviors.pass_item import detect_pass_items
 from utils.json_schema import make_abnormal_frame
 from socket_sever.udp_multicast import send_json
 from utils.reporter import report_exam_alarm
-from utils.logging_util import get_logger
 
 from socket_sever.rtsp_state import get_rtsp_url
 
@@ -403,8 +402,6 @@ def _detection_loop(cfg: Config):
     cap = None
     current_url = None
 
-    logger = get_logger()
-
     while True:
         desired_url = get_rtsp_url() or getattr(cfg, "RTSP_URL", None)
         if not desired_url:
@@ -415,8 +412,6 @@ def _detection_loop(cfg: Config):
         current_url = desired_url
         if not cap.isOpened():
             print(f"[DetectionLoop] RTSP 打不开，{cfg.RECONNECT_INTERVAL_SEC}s 后重试: {desired_url}")
-            logger.info(f"[DetectionLoop] RTSP 打不开，{cfg.RECONNECT_INTERVAL_SEC}s 后重试: {desired_url}")
-
             time.sleep(cfg.RECONNECT_INTERVAL_SEC)
             continue
 
@@ -437,11 +432,9 @@ def _detection_loop(cfg: Config):
                 cap = cv2.VideoCapture(current_url)
                 if not cap.isOpened():
                     print(f"[RTSP] switch failed, {cfg.RECONNECT_INTERVAL_SEC}s retry: {current_url}")
-                    logger.info(f"[RTSP] switch failed, {cfg.RECONNECT_INTERVAL_SEC}s retry: {current_url}")
                     time.sleep(cfg.RECONNECT_INTERVAL_SEC)
                     continue
                 print(f"[RTSP] switch to: {current_url}")
-                logger.info(f"[RTSP] switch to: {current_url}")
 
                 # 切换流后重置一些计时器，避免立刻触发定时发送
                 last_infer_ms = 0
@@ -450,7 +443,6 @@ def _detection_loop(cfg: Config):
             ret, frame = cap.read()
             if not ret:
                 print("[DetectionLoop] 读取帧失败，准备重连 RTSP ...")
-                logger.info("[DetectionLoop] 读取帧失败，准备重连 RTSP ...")
                 cap.release()
                 cap = None
                 time.sleep(cfg.RECONNECT_INTERVAL_SEC)
@@ -468,12 +460,9 @@ def _detection_loop(cfg: Config):
             # if cfg.FRAME_STRIDE > 1 and (frame_idx % cfg.FRAME_STRIDE != 0):
             #     continue
 
-            infer_start = time.time()
-
             # YOLO-pose 检测（只返回 person + 关键点）
             pose_results = pose_model.infer(frame)
             print(f"[DEBUG] frame_idx={frame_idx}, pose_num={len(pose_results)}")
-            logger.info(f"[DEBUG] frame_idx={frame_idx}, pose_num={len(pose_results)}")
 
             # 用骨架 + 分类器 做转头判断
             head_boxes, _ = detect_head_turns(
@@ -504,14 +493,8 @@ def _detection_loop(cfg: Config):
                 f"pass_boxes={len(pass_boxes)}"
             )
 
-            logger.info(
-                f"[DEBUG] head_boxes={len(head_boxes)}, raise_boxes={len(raise_boxes)}, "
-                f"pass_boxes={len(pass_boxes)}"
-            )
-
             raw_boxes = head_boxes + raise_boxes + pass_boxes
             now_ts = time.time()
-            infer_interval_ms = int((now_ts - infer_start) * 1000)
 
             # all_boxes = smoother.update(raw_boxes, now_ts)
             smoothed_boxes = smoother.update(raw_boxes, now_ts)
@@ -560,9 +543,6 @@ def _detection_loop(cfg: Config):
 
             if send_msg:
                 event_json = make_abnormal_frame(all_boxes, group_id)
-                event_json["frame_idx"] = frame_idx
-                event_json["send_ts_ms"] = int(time.time() * 1000)
-                event_json["infer_interval_ms"] = infer_interval_ms
 
                 H, W = frame.shape[:2]
                 if send_msg:
@@ -571,9 +551,7 @@ def _detection_loop(cfg: Config):
 
                     # 调试用打印输出
                     print("\n=== 发送给前端的 JSON ===")
-                    logger.info("\n=== 发送给前端的 JSON ===")
                     print(event_json)
-                    logger.info(event_json)
 
                     send_json(event_json)  # 先 UDP发送给前端
 
@@ -597,7 +575,6 @@ def _detection_loop(cfg: Config):
 
                         cv2.imwrite(str(img_path), vis_frame)
                         print("[Detection] 已保存截图:", img_path)
-                        logger.info("[Detection] 已保存截图:", img_path)
 
                         # 调用 reporter，把 event_json + imgPath 写库
                         report_exam_alarm(event_json, str(img_path))
@@ -609,7 +586,6 @@ def _detection_loop(cfg: Config):
                         last_sent_boxes_for_move = []
 
                     print(f"[AbnormalMsg] id={group_id}, count={curr_count}")
-                    logger.info(f"[AbnormalMsg] id={group_id}, count={curr_count}")
 
             prev_count = curr_count
 
@@ -618,4 +594,3 @@ def start_detection_thread(cfg: Config):
     t = threading.Thread(target=_detection_loop, args=(cfg,), daemon=True)
     t.start()
     print("[Main] Detection thread started.")
-    get_logger().info("[Main] Detection thread started.")

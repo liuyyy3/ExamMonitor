@@ -7,7 +7,7 @@
 
 import numpy as np
 
-KP_CONF_TH = 0.35
+KP_CONF_TH = 0.25
 # 肩/肘/腕 y 允许的最大偏差（相对身高）
 HORIZ_Y_RATIO = 0.18  # 非常规整、正面、实验室0.08 ~ 0.10， 普通考试监控（推荐）0.12 ~ 0.18， 俯视角明显 / 桌椅不齐0.20 ~ 0.25
 MIN_Y_TOL = 12.0
@@ -57,8 +57,9 @@ def _is_arm_horizontal(kpts, side="left", kp_conf_thr=KP_CONF_TH):
         return False
 
     y_tol = max(MIN_Y_TOL, HORIZ_Y_RATIO * person_h)
-    y_vals = [y_sh, y_el, y_wr]
-    if (max(y_vals) - min(y_vals)) > y_tol:
+    if y_el < y_tol or y_wr < y_sh:
+        return False
+    if max(y_el - y_sh, y_wr - y_sh) > y_tol:
         return False
 
     return True

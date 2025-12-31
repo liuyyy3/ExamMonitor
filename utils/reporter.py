@@ -9,8 +9,11 @@ import requests, json, time
 from pathlib import Path
 from app.config import Config
 from datetime import datetime, timezone, timedelta
+from utils.logging_util import get_logger
 
 def report_exam_alarm(event_json: dict, img_path: str):
+    logger = get_logger()
+
     if event_json is None:
         event_json = {}
 
@@ -50,7 +53,9 @@ def report_exam_alarm(event_json: dict, img_path: str):
 
     # 调试用打印输出
     print("\n=== POST 给 Node 的 JSON ===")
+    logger.info("\n=== POST 给 Node 的 JSON ===")
     print(payload)
+    logger.info(payload)
 
     headers = {}
     if Config.TOKEN:
@@ -65,6 +70,8 @@ def report_exam_alarm(event_json: dict, img_path: str):
         )
         r.raise_for_status()
         print("[ExamReporter] 上报成功:", r.text[:200])
+        logger.info("[ExamReporter] 上报成功:", r.text[:200])
     except Exception as e:
         print("[ExamReporter] 上报失败:", e)
+        logger.info("[ExamReporter] 上报失败:", e)
 

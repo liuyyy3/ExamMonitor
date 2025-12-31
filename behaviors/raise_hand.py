@@ -8,7 +8,7 @@
 import math
 import numpy as np
 
-KP_CONF_TH = 0.35    # 关键点置信度阈值
+KP_CONF_TH = 0.25    # 关键点置信度阈值
 ANGLE_TH = 55.0    # 前臂与竖直方向夹角阈值
 DELTA_Y_RATIO = 0.08   # 肩-腕高度阈值系数
 SIDE_RATIO_MAX = 1.2     # 水平偏移不超过肩宽的多少倍（防止侧伸）
@@ -126,5 +126,6 @@ def detect_raise_hands(
                 "type": "举手",
                 "color": "#ec6314"  # 从绿色更改为橘红色
                 # "color": "#00ff00"  # 绿色
+
             })
     return abnormal_boxes, total_person

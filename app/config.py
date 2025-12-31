@@ -4,8 +4,6 @@
 # @Date  : 2025/12/5 15:15
 
 # 配置（视频源、模型路径、阈值等）
-# 换板卡换路径的时候要记得修改代码中的三处路径问题
-
 import os
 from pathlib import Path
 import socket
@@ -23,24 +21,24 @@ def get_host_ip():
 class Config:
 
     # Node服务地址
-    NODE_BASE = os.getenv('NODE_BASE', f"http://{get_host_ip()}:8080")  # NODE_BASE要换成node的实际地址
+    NODE_BASE = os.getenv('NODE_BASE', f"http://127.0.0.1:8080")  # NODE_BASE要换成node的实际地址
     # 具体接口以后定，先用 warning
     REPORT_URL = f"{NODE_BASE}/warning/alg_alarm_fetch"
     # 鉴定权限，如果 node需要
     TOKEN = os.getenv("NODE_TOKEN", "")  # 前端的告警上报接口，从这里上报告警信息，node需要校验 token
 
     # 截图保存目录
-    SNAP_DIR = Path(os.getenv("EXAM_SNAP_DIR", "/home/tom/ExamMonitor/snapshots"))
+    SNAP_DIR = Path(os.getenv("EXAM_SNAP_DIR", "/home/cat/ExamMonitor/snapshots"))
     CAMERA_NAME = os.getenv("EXAM_CAMERA_NAME", "exam_room1")
 
     # 基础配置信息
     RTSP_URL = "rtsp://192.168.9.140:8554/stream1"
-    POSE_RKNN_PATH = '/home/tom/test_program/model/yolov8n-pose.rknn'
-    CLS_RKNN_PATH = '/home/tom/test_program/model/mobilenet_cs12_fp32_nonorm.rknn'
+    POSE_RKNN_PATH = '/home/cat/ExamMonitor/models/yolov8n-pose.rknn'
+    CLS_RKNN_PATH = '/home/cat/ExamMonitor/models/mobilenet_cs12_fp32_nonorm.rknn'
     CLASS_NAMES = ['normal', 'turn_head']
 
     # 上传json文件的间隔，为了保持前端画的框跟得上人物
-    FRAME_MSG_INTERVAL = 1.0
+    FRAME_MSG_INTERVAL = 0.15
 
     # YOLO-pose 阈值
     POSE_INPUT_SIZE = (640, 640)

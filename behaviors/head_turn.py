@@ -9,6 +9,7 @@ import numpy as np
 import cv2
 
 from models.headturn_cls import HeadTurnClassifier
+from utils.logging_util import get_logger
 
 def draw_single_person_skeleton(h, w, xy, conf, conf_thr=0.3):
     canvas = np.zeros((h, w, 3), dtype=np.uint8)
@@ -134,6 +135,7 @@ def detect_head_turns(
     min_valid_kpts=3,
     head_turn_prob_thr=0.5,
 ):
+    logger = get_logger()
     H, W = frame_bgr.shape[:2]
 
     abnormal_boxes = []
@@ -176,6 +178,7 @@ def detect_head_turns(
             continue
         label, prob = res
         print(f"[DEBUG-CLS] label={label}, prob={prob:.3f}")
+        logger.info(f"[DEBUG-CLS] label={label}, prob={prob:.3f}")
 
         if label == "turn_head" and prob >= head_turn_prob_thr:
             abnormal_boxes.append({

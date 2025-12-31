@@ -139,6 +139,8 @@ def start_rtsp_config_rx(stop_event: threading.Event, bind_ip: str = "0.0.0.0") 
     return t
 """
 
+
+# socket_sever/rtsp_config_rx.py
 import socket
 import json
 import threading
@@ -151,6 +153,7 @@ BIND_IP = "127.0.0.1"
 PORT = 6001
 
 _RTSP_RE = re.compile(r"(rtsps?://[^\s\"\'\)\]\}\>,]+)", re.IGNORECASE)
+
 
 def _extract_rtsp_from_any(obj: Any) -> Optional[str]:
     if obj is None:
@@ -219,3 +222,4 @@ def start_rtsp_config_rx(stop_event: threading.Event) -> threading.Thread:
     t = threading.Thread(target=_worker, daemon=True)
     t.start()
     return t
+
