@@ -4,6 +4,8 @@
 # @Date  : 2025/12/5 15:15
 
 # 配置（视频源、模型路径、阈值等）
+# 换板卡换路径的时候要记得修改代码中的三处路径问题
+
 import os
 from pathlib import Path
 import socket
@@ -65,8 +67,10 @@ class Config:
     # 每隔多少毫秒做一次推理
     INFER_INTERVAL_MS = 100
 
-    # 异常框位移过大时不发送给前端（像素，<=0 表示不限制）
-    BOX_MOVE_MAX_PX = 120
+    # 运动速度阈值（像素/秒），连续移动判定阈值
+    MOVE_SPEED_PX_PER_S = float(os.getenv("EXAM_MOVE_SPEED_PX_PER_S", 160))
+    MOVE_ON_N = int(os.getenv("EXAM_MOVE_ON_N", 3))  # 100ms 推理一次，连续 3 次移动才算“在走”
+    MOVE_OFF_N = int(os.getenv("EXAM_MOVE_OFF_N", 6))  # 连续 6 次不动才算“停止走动”
 
 config = Config()
 

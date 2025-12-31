@@ -25,6 +25,7 @@ from models.pose_infer import PoseInfer
 from models.headturn_cls import HeadTurnClassifier
 from behaviors.head_turn import detect_head_turns
 from behaviors.raise_hand import detect_raise_hands
+from behaviors.pass_item import detect_pass_items
 
 from utils.json_schema import make_abnormal_frame
 from socket_sever.udp_multicast import send_json
@@ -171,14 +172,28 @@ class BoxSmoother:
     # raw_boxes: list[dict]  每个 dict 至少包含: type,x,y,w,h,color
     # 输出: 平滑后的 list[dict]
 
-    def __init__(self, miss_max=2, ema_alpha=0.6, match_iou=0.2):
+    # def __init__(self, miss_max=2, ema_alpha=0.6, match_iou=0.2):
+    def __init__(
+            self,
+            miss_max=2,
+            ema_alpha=0.6,
+            match_iou=0.2,
+            move_speed_px_per_s=160.0,
+            move_on_n=3,
+            move_off_n=6,
+    ):
         self.miss_max = miss_max
         self.ema_alpha = ema_alpha
         self.match_iou = match_iou
+        self.move_speed_px_per_s = move_speed_px_per_s
+        self.move_on_n = move_on_n
+        self.move_off_n = move_off_n
         self.tracks = {}   # tid -> track
         self._next_id = 1
 
     def _new_track(self, b, now_ts):
+        x1, y1, x2, y2 = b["bbox"]
+        center = ((x1 + x2) / 2.0, (y1 + y2) / 2.0)
         tid = self._next_id
         self._next_id += 1
         self.tracks[tid] = {
@@ -187,6 +202,10 @@ class BoxSmoother:
             "bbox": [float(v) for v in b["bbox"]],
             "miss": 0,
             "last_ts": now_ts,
+            "last_center": center,
+            "moving_on_count": 0,
+            "moving_off_count": 0,
+            "is_moving": False,
         }
         return tid
 
@@ -224,6 +243,24 @@ class BoxSmoother:
                     a * new[2] + (1 - a) * old[2],
                     a * new[3] + (1 - a) * old[3],
                 ]
+
+                cx = (tr["bbox"][0] + tr["bbox"][2]) / 2.0
+                cy = (tr["bbox"][1] + tr["bbox"][3]) / 2.0
+                dt = max(1e-6, now_ts - tr.get("last_ts", now_ts))
+                dist = np.hypot(cx - tr["last_center"][0], cy - tr["last_center"][1])
+                speed = dist / dt
+                if speed > self.move_speed_px_per_s:
+                    tr["moving_on_count"] += 1
+                    tr["moving_off_count"] = 0
+                    if tr["moving_on_count"] >= self.move_on_n:
+                        tr["is_moving"] = True
+                else:
+                    tr["moving_off_count"] += 1
+                    tr["moving_on_count"] = 0
+                    if tr["moving_off_count"] >= self.move_off_n:
+                        tr["is_moving"] = False
+                tr["last_center"] = (cx, cy)
+
                 tr["miss"] = 0
                 tr["last_ts"] = now_ts
                 tr["color"] = b.get("color", tr["color"])
@@ -253,6 +290,7 @@ class BoxSmoother:
                 "bbox": tr["bbox"],
                 # 可选：带上 tid，未来前端如果愿意可用它更稳
                 "tid": tid,
+                "moving": tr.get("is_moving", False),
             })
         return out
 
@@ -294,47 +332,6 @@ def _boxes_group_changed(prev_boxes, curr_boxes, iou_thr=0.5) -> bool:
 
     # 所有 prev box 都能匹配到 curr 中的某个 box → 视作“同一批人”
     return False
-
-# 新增一个函数功能，当框的移动过大的时候，就不给前端发送 json
-def _boxes_move_too_much(prev_boxes, curr_boxes, max_move_px):
-    if max_move_px <= 0:
-        return False
-    if len(prev_boxes) == 0 or len(curr_boxes) == 0:
-        return False
-
-    used = [False] * len(curr_boxes)
-
-    for p in prev_boxes:
-        pb = p["bbox"]
-        p_type = p.get("type")
-        best_iou = 0.0
-        best_idx = -1
-
-        for j, c in enumerate(curr_boxes):
-            if used[j]:
-                continue
-            if c.get("type") != p_type:
-                continue
-            iou = _iou(pb, c["bbox"])
-            if iou > best_iou:
-                best_iou = iou
-                best_idx = j
-
-        if best_idx == -1:
-            return True
-
-        used[best_idx] = True
-
-        cb = curr_boxes[best_idx]["bbox"]
-        px = (pb[0] + pb[2]) / 2.0
-        py = (pb[1] + pb[3]) / 2.0
-        cx = (cb[0] + cb[2]) / 2.0
-        cy = (cb[1] + cb[3]) / 2.0
-        if np.hypot(cx - px, cy - py) > max_move_px:
-            return True
-
-    return False
-
 
 def push_event(event: dict):
     # 内部用：压入事件队列, HTTP用法
@@ -385,6 +382,9 @@ def _detection_loop(cfg: Config):
         miss_max=getattr(cfg, "BOX_MISS_MAX", 2),
         ema_alpha=getattr(cfg, "BOX_EMA_ALPHA", 0.6),
         match_iou=getattr(cfg, "BOX_MATCH_IOU", 0.2),
+        move_speed_px_per_s=getattr(cfg, "MOVE_SPEED_PX_PER_S", 160.0),
+        move_on_n=getattr(cfg, "MOVE_ON_N", 3),
+        move_off_n=getattr(cfg, "MOVE_OFF_N", 6),
     )
 
     frame_idx = 0
@@ -396,6 +396,8 @@ def _detection_loop(cfg: Config):
 
     last_infer_ms = 0
     cached_event_json = None  # 用于显示最近消息
+
+    last_sent_boxes_for_move = []
 
     cap = None
     current_url = None
@@ -479,12 +481,29 @@ def _detection_loop(cfg: Config):
                 kp_conf_thr=cfg.KP_CONF_THR,
             )
 
-            print(f"[DEBUG] head_boxes={len(head_boxes)}, raise_boxes={len(raise_boxes)}")
+            # print(f"[DEBUG] head_boxes={len(head_boxes)}, raise_boxes={len(raise_boxes)}")
+            pass_boxes, total_person_pass = detect_pass_items(
+                frame,
+                pose_results,
+                kp_conf_thr=cfg.KP_CONF_THR,
+            )
 
-            raw_boxes = head_boxes + raise_boxes
+            print(
+                f"[DEBUG] head_boxes={len(head_boxes)}, raise_boxes={len(raise_boxes)}, "
+                f"pass_boxes={len(pass_boxes)}"
+            )
+
+            raw_boxes = head_boxes + raise_boxes + pass_boxes
             now_ts = time.time()
 
-            all_boxes = smoother.update(raw_boxes, now_ts)
+            # all_boxes = smoother.update(raw_boxes, now_ts)
+            smoothed_boxes = smoother.update(raw_boxes, now_ts)
+            all_boxes = []
+            for b in smoothed_boxes:
+                if b.get("moving"):
+                    continue
+                cleaned = {k: v for k, v in b.items() if k != "moving"}
+                all_boxes.append(cleaned)
             curr_count = len(all_boxes)
 
 
@@ -523,24 +542,12 @@ def _detection_loop(cfg: Config):
                 send_msg = True
 
             if send_msg:
-                # event_json = make_abnormal_frame(all_boxes, group_id)
-
-                if _boxes_move_too_much(
-                    prev_boxes_for_group,
-                    all_boxes,
-                    getattr(cfg, "BOX_MOVE_MAX_PX", 0),
-                ):
-                    print("[AbnormalMsg] skip send: boxes move too much")
-                    send_msg = False
-                    need_report_to_node = False
-                else:
-                    event_json = make_abnormal_frame(all_boxes, group_id)
+                event_json = make_abnormal_frame(all_boxes, group_id)
 
                 H, W = frame.shape[:2]
                 if send_msg:
                     event_json["frame_w"] = W
                     event_json["frame_h"] = H
-
 
                     # 调试用打印输出
                     print("\n=== 发送给前端的 JSON ===")
@@ -574,6 +581,9 @@ def _detection_loop(cfg: Config):
 
                     if curr_count > 0:
                         last_boxes_update_time = now_ts
+                        last_sent_boxes_for_move = [b.copy() for b in all_boxes]
+                    else:
+                        last_sent_boxes_for_move = []
 
                     print(f"[AbnormalMsg] id={group_id}, count={curr_count}")
 
